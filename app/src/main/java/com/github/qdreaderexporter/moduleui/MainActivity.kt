@@ -62,7 +62,7 @@ class MainActivity : AppCompatActivity() {
                 "3. 强行停止起点读书后重新打开\n" +
                 "4. 进入小说阅读页，右下角出现「导出」按钮\n" +
                 "5. 浏览章节后导出当前章 / 已缓存章\n" +
-                "6. 文件位于宿主应用外部私有目录 Documents/QDReaderExporter/"
+                "6. 导出目录: /sdcard/Documents/QDReaderExporter/"
         )
         addLine("")
         addLine("声明", 16f, Color.BLACK, true)

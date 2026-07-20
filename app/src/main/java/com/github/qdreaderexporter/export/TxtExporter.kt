@@ -55,7 +55,7 @@ object TxtExporter {
 
     /**
      * Export every book currently held in process memory.
-     * One TXT per book under Documents/QDReaderExporter/.
+     * One TXT per book under /sdcard/Documents/QDReaderExporter/.
      */
     fun exportAllCachedBooks(context: Context, options: ExportOptions = ExportOptions()): Result {
         val summaries = ChapterMemoryStore.summaries()
@@ -91,14 +91,40 @@ object TxtExporter {
         )
     }
 
+    /**
+     * Preferred: `/sdcard/Documents/QDReaderExporter`
+     * (= Environment.DIRECTORY_DOCUMENTS public dir).
+     * Falls back to host app-specific Documents only if public dir is not writable.
+     */
     fun exportDir(context: Context): File {
-        val dir = File(
+        val publicDocs = Environment.getExternalStoragePublicDirectory(
+            Environment.DIRECTORY_DOCUMENTS
+        )
+        val preferred = File(publicDocs, "QDReaderExporter")
+        if (ensureWritableDir(preferred)) return preferred
+
+        // Some devices expose /sdcard differently from getExternalStoragePublicDirectory
+        val alt = File("/sdcard/Documents/QDReaderExporter")
+        if (alt.absolutePath != preferred.absolutePath && ensureWritableDir(alt)) {
+            return alt
+        }
+
+        val fallback = File(
             context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS),
             "QDReaderExporter"
         )
-        if (!dir.exists()) dir.mkdirs()
-        return dir
+        if (!fallback.exists()) fallback.mkdirs()
+        return fallback
     }
+
+    private fun ensureWritableDir(dir: File): Boolean = runCatching {
+        if (!dir.exists() && !dir.mkdirs()) return false
+        if (!dir.isDirectory || !dir.canWrite()) return false
+        val probe = File(dir, ".qdre_write_probe")
+        probe.writeText("ok")
+        probe.delete()
+        true
+    }.getOrDefault(false)
 
     private fun writeSingle(
         context: Context,
