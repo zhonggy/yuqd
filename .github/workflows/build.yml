@@ -1,15 +1,19 @@
-name: Build Debug APK
+name: Build and Release APK
 
 on:
   push:
     branches: [master, main]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
 
     steps:
       - name: Checkout
@@ -30,10 +34,51 @@ jobs:
       - name: Assemble debug APK
         run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
 
-      - name: Upload debug APK
+      - name: Rename APK
+        run: |
+          mkdir -p dist
+          VERSION=$(grep versionName app/build.gradle.kts | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          SRC=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+          OUT="dist/QDReaderExporter-${VERSION}-debug.apk"
+          cp "$SRC" "$OUT"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "APK_PATH=$OUT" >> "$GITHUB_ENV"
+          ls -lh dist
+
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: QDReaderExporter-debug
-          path: app/build/outputs/apk/debug/*.apk
+          path: dist/*.apk
           if-no-files-found: error
           retention-days: 30
+
+      - name: Create GitHub Release (main / tags / manual)
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/'))
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}-${{ github.run_number }}
+          name: QDReaderExporter ${{ env.VERSION }} (#${{ github.run_number }})
+          body: |
+            ## QDReaderExporter ${{ env.VERSION }}
+
+            LSPosed module for 起点读书 (`com.qidian.QDReader`) chapter TXT export.
+
+            ### Install
+            1. Install the APK below
+            2. Open **LSPosed Manager** → Modules → enable **QDReaderExporter**
+            3. Scope only `com.qidian.QDReader`
+            4. Force-stop 起点读书 and reopen
+
+            If the module does not appear: force-stop LSPosed Manager, or reboot once, then search `QDReader` / `Exporter`.
+
+            ### Notes
+            - Target host version: **7.9.394** (versionCode 1526)
+            - Only captures host-decrypted / already-loaded plaintext
+            - Debug-signed APK
+          files: dist/*.apk
+          generate_release_notes: true
+          make_latest: true
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

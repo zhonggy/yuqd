@@ -9,10 +9,11 @@ android {
 
     defaultConfig {
         applicationId = "com.github.qdreaderexporter"
-        minSdk = 31
-        targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        // Broader install base; module still intended for Android 12+ usage
+        minSdk = 27
+        targetSdk = 34
+        versionCode = 3
+        versionName = "0.2.1"
     }
 
     buildTypes {
@@ -22,6 +23,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            isMinifyEnabled = false
         }
     }
 
@@ -34,12 +38,18 @@ android {
         buildConfig = true
     }
 
-    androidResources {
-        additionalParameters += listOf(
-            "--allow-reserved-package-id",
-            "--package-id",
-            "0x64"
-        )
+    // Removed custom package-id 0x64: some LSPosed managers fail to parse module meta
+    // when resources are not under the default 0x7f package id.
+
+    packaging {
+        resources {
+            excludes += setOf(
+                "META-INF/INDEX.LIST",
+                "META-INF/*.SF",
+                "META-INF/*.DSA",
+                "META-INF/*.RSA"
+            )
+        }
     }
 
     lint {

@@ -66,22 +66,36 @@ cd D:\github\QDReaderExporter
 
 仓库已包含 [`.github/workflows/build.yml`](.github/workflows/build.yml)：
 
-1. 把本工程推到 GitHub（新建仓库后 `git init && git remote add origin ... && git push`）  
-2. **Actions** 页手动 **Run workflow**，或 push 到 `main`/`master`  
-3. 构建成功后在 Artifacts 下载 **`QDReaderExporter-debug`**
+1. push 到 `main` / 打 `v*` tag / 手动 Run workflow  
+2. 构建成功后：
+   - **Actions → Artifacts**：`QDReaderExporter-debug`
+   - **[Releases](https://github.com/zhonggy/yuqd/releases)**：自动上传 APK（latest）
 
-不需要本机 Android SDK；GitHub-hosted runner 自带 JDK 17 + 会自动拉 Android 依赖。
+不需要本机 Android SDK。
 
 ## 安装与启用
 
-1. 安装模块 APK  
-2. LSPosed → 启用 **QDReaderExporter**  
-3. 作用域**仅**勾选 `com.qidian.QDReader`  
-4. 强行停止「起点读书」后重新打开  
-5. 打开任意可读小说阅读页 → 右下角「导出」  
-6. 先翻几章再导出（v1 为**被动缓存**：只导出本进程已加载过的章）  
+1. 从 [Releases](https://github.com/zhonggy/yuqd/releases) 下载 APK 并安装  
+2. **强行停止 LSPosed 管理器**（或重启手机）后再打开  
+3. LSPosed → **模块** → 启用 **QDReaderExporter**（也可搜 `Exporter` / `qdreaderexporter`）  
+4. 作用域**仅**勾选 `com.qidian.QDReader`  
+5. 强行停止「起点读书」后重新打开  
+6. 打开任意可读小说阅读页 → 右下角「导出」  
+7. 先翻几章再导出（被动缓存：只导出本进程已加载过的章）  
 
 Logcat 过滤：`QDReaderExporter`
+
+### LSPosed 里找不到模块？
+
+| 检查 | 说明 |
+|------|------|
+| 是否装上了 | 桌面/应用列表应有 **QDReaderExporter** |
+| 刷新模块列表 | 强停 LSPosed 管理器，或重启一次 |
+| 搜包名 | `com.github.qdreaderexporter` |
+| 框架类型 | 需 **Zygisk LSPosed**（不是仅 ROOT） |
+| 多用户/分身 | 模块要装在与 LSPosed 同一用户空间 |
+
+APK 内应包含：`assets/xposed_init` + Manifest `xposedmodule=true`。
 
 ## 工程结构
 
