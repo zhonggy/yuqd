@@ -12,8 +12,8 @@ android {
         // Broader install base; module still intended for Android 12+ usage
         minSdk = 27
         targetSdk = 34
-        versionCode = 3
-        versionName = "0.2.1"
+        versionCode = 4
+        versionName = "0.2.2"
     }
 
     buildTypes {
@@ -58,10 +58,35 @@ android {
     }
 }
 
-// YukiHookAPI 1.3.2 AAR metadata asks for compileSdk 37; local SDK only has 35.
+// YukiHookAPI 1.3.2 AAR metadata asks for compileSdk 37; local/CI may only have 35.
 tasks.configureEach {
     if (name.contains("AarMetadata", ignoreCase = true)) {
         enabled = false
+    }
+}
+
+// Fail fast if Xposed entry asset is missing from the built APK (clean CI regression guard).
+afterEvaluate {
+    tasks.register("verifyXposedAssets") {
+        dependsOn("packageDebug")
+        doLast {
+            val apkDir = layout.buildDirectory.dir("outputs/apk/debug").get().asFile
+            val apk = apkDir.listFiles()?.firstOrNull { it.extension == "apk" }
+                ?: error("Debug APK not found under ${apkDir.absolutePath}")
+            val listing = providers.exec {
+                commandLine("unzip", "-l", apk.absolutePath)
+            }.standardOutput.asText.get()
+            check(listing.contains("assets/xposed_init")) {
+                "APK missing assets/xposed_init — LSPosed will not load this module: ${apk.name}"
+            }
+            check(listing.contains("META-INF/yukihookapi_init")) {
+                "APK missing META-INF/yukihookapi_init: ${apk.name}"
+            }
+            logger.lifecycle("Verified Xposed assets in ${apk.name}")
+        }
+    }
+    tasks.named("assembleDebug") {
+        finalizedBy("verifyXposedAssets")
     }
 }
 

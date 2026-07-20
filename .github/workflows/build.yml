@@ -34,6 +34,17 @@ jobs:
       - name: Assemble debug APK
         run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
 
+      - name: Verify xposed_init is inside APK
+        run: |
+          APK=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+          echo "APK=$APK"
+          unzip -l "$APK" | tee /tmp/apk-list.txt
+          grep -q "assets/xposed_init" /tmp/apk-list.txt
+          grep -q "META-INF/yukihookapi_init" /tmp/apk-list.txt
+          echo "xposed_init content:"
+          unzip -p "$APK" assets/xposed_init
+          echo
+
       - name: Rename APK
         run: |
           mkdir -p dist
