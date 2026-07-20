@@ -36,42 +36,62 @@ object FloatingExportMenu {
 
     fun attach(activity: Activity) {
         lastActivity = WeakReference(activity)
-        val content = activity.findViewById<ViewGroup>(android.R.id.content) ?: return
+        val content = activity.findViewById<ViewGroup>(android.R.id.content)
+        if (content == null) {
+            Toast.makeText(activity.applicationContext, "QDRE: content=null", Toast.LENGTH_SHORT).show()
+            return
+        }
         if (content.findViewWithTag<View>(TAG) != null) return
 
         val density = activity.resources.displayMetrics.density
-        val size = (56 * density).toInt()
-        val margin = (16 * density).toInt()
+        val size = (58 * density).toInt()
+        val margin = (18 * density).toInt()
 
         val fab = TextView(activity).apply {
             tag = TAG
             text = "导出"
             setTextColor(Color.WHITE)
-            textSize = 14f
+            textSize = 15f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(Color.parseColor("#FFFB8C00"))
+                setColor(Color.parseColor("#FFFF6D00"))
+                setStroke((2 * density).toInt(), Color.WHITE)
             }
-            elevation = 8 * density
+            elevation = 12 * density
             isClickable = true
             isFocusable = true
+            // Keep above host chrome
+            translationZ = 100f
             setOnClickListener { showMenu(activity) }
             enableDrag(this)
         }
 
         val lp = FrameLayout.LayoutParams(size, size).apply {
             gravity = Gravity.BOTTOM or Gravity.END
-            setMargins(margin, margin, margin, margin * 3)
+            setMargins(margin, margin, margin, margin * 4)
         }
-        content.addView(fab, lp)
+        // android.R.id.content is usually FrameLayout; if not, wrap safely
+        try {
+            content.addView(fab, lp)
+        } catch (_: Throwable) {
+            val wrap = FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            val overlay = FrameLayout(activity)
+            overlay.tag = TAG + "_wrap"
+            content.addView(overlay, wrap)
+            overlay.addView(fab, lp)
+        }
+        Toast.makeText(activity.applicationContext, "QDReaderExporter 导出按钮已显示", Toast.LENGTH_SHORT).show()
     }
 
     fun detach(activity: Activity) {
         val content = activity.findViewById<ViewGroup>(android.R.id.content) ?: return
-        val existing = content.findViewWithTag<View>(TAG) ?: return
-        content.removeView(existing)
+        content.findViewWithTag<View>(TAG)?.let { content.removeView(it) }
+        content.findViewWithTag<View>(TAG + "_wrap")?.let { content.removeView(it) }
     }
 
     private fun showMenu(activity: Activity) {

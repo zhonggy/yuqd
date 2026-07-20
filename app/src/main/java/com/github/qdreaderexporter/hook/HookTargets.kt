@@ -17,6 +17,15 @@ object HookTargets {
         "com.qidian.QDReader.ui.activity.QDReaderActivity"
     const val CLS_READER_LITE_ACTIVITY =
         "com.qidian.QDReader.ui.activity.QDReaderLiteActivity"
+    const val CLS_BASE_IMMERSE_READER_ACTIVITY =
+        "com.qidian.QDReader.ui.activity.BaseImmerseReaderActivity"
+
+    /** All known reader activity FQCNs (direct hooks). */
+    val READER_ACTIVITY_CANDIDATES = arrayOf(
+        CLS_READER_ACTIVITY,
+        CLS_READER_LITE_ACTIVITY,
+        CLS_BASE_IMMERSE_READER_ACTIVITY
+    )
 
     // Engine / providers
     const val CLS_READ_BOOK =
