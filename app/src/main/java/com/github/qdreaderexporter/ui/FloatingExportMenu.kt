@@ -214,22 +214,29 @@ object FloatingExportMenu {
 
     private fun exportCurrentBook(activity: Activity) {
         val count = ChapterMemoryStore.count()
-        if (count == 0) {
-            toast(activity, "当前书籍缓存为空，请先翻页加载已下载/可读章节")
+        val total = ChapterMemoryStore.totalChapterCount()
+        if (count == 0 && total == 0) {
+            AlertDialog.Builder(activity)
+                .setTitle("无法导出")
+                .setMessage(
+                    "内存中还没有捕获到任何章节正文。\n\n" +
+                        "请先：\n" +
+                        "1. 在阅读页翻 2～3 页（让宿主解密加载）\n" +
+                        "2. 打开「查看缓存状态」确认章节数 > 0\n" +
+                        "3. 再点导出\n\n" +
+                        "也可先跑「运行时诊断」，日志会写到导出目录。"
+                )
+                .setPositiveButton("查看缓存状态") { _, _ -> showStatus(activity) }
+                .setNegativeButton("运行时诊断") { _, _ -> runDiagnostic(activity) }
+                .setNeutralButton("关闭", null)
+                .show()
             return
         }
         toast(activity, "正在导出当前书籍…")
         io.execute {
             val result = TxtExporter.exportCurrentBook(activity.applicationContext)
             mainHandler.post {
-                when (result) {
-                    is TxtExporter.Result.Success ->
-                        toast(
-                            activity,
-                            "已导出 ${result.chapterCount} 章\n${result.file.absolutePath}"
-                        )
-                    is TxtExporter.Result.Failure -> toast(activity, result.message)
-                }
+                showExportResult(activity, result, title = "导出当前书")
             }
         }
     }
@@ -238,10 +245,14 @@ object FloatingExportMenu {
         val books = ChapterMemoryStore.bookIds().size
         val chapters = ChapterMemoryStore.totalChapterCount()
         if (chapters == 0) {
-            toast(
-                activity,
-                "内存中无已捕获章节。\n请打开已下载书籍并翻页；加密离线章不会被解密导出。"
-            )
+            AlertDialog.Builder(activity)
+                .setTitle("无法导出")
+                .setMessage(
+                    "内存中无已捕获章节。\n" +
+                        "请打开已下载书籍并翻页；加密离线章不会被解密导出。"
+                )
+                .setPositiveButton("确定", null)
+                .show()
             return
         }
         AlertDialog.Builder(activity)
@@ -256,22 +267,49 @@ object FloatingExportMenu {
                 io.execute {
                     val result = TxtExporter.exportAllCachedBooks(activity.applicationContext)
                     mainHandler.post {
-                        when (result) {
-                            is TxtExporter.Result.Success -> {
-                                val dir = result.file.parentFile?.absolutePath
-                                    ?: result.file.absolutePath
-                                toast(
-                                    activity,
-                                    "已导出 ${result.bookCount} 本 / ${result.chapterCount} 章\n$dir"
-                                )
-                            }
-                            is TxtExporter.Result.Failure -> toast(activity, result.message)
-                        }
+                        showExportResult(activity, result, title = "导出全部书籍")
                     }
                 }
             }
             .setNegativeButton("取消", null)
             .show()
+    }
+
+    private fun showExportResult(
+        activity: Activity,
+        result: TxtExporter.Result,
+        title: String
+    ) {
+        if (activity.isFinishing) return
+        when (result) {
+            is TxtExporter.Result.Success -> {
+                val file = result.file
+                val exists = file.exists()
+                val size = if (exists) file.length() else 0L
+                val msg =
+                    "已导出 ${result.bookCount} 本 / ${result.chapterCount} 章\n\n" +
+                        "文件:\n${file.absolutePath}\n\n" +
+                        "大小: ${size} 字节\n" +
+                        "存在: $exists\n" +
+                        "目录:\n${result.dir.absolutePath}\n\n" +
+                        "请用文件管理器打开上述路径。\n" +
+                        "若在 /Android/data/... 下，需 ROOT 或 adb 才能直接看。"
+                AlertDialog.Builder(activity)
+                    .setTitle(title)
+                    .setMessage(msg)
+                    .setPositiveButton("确定", null)
+                    .show()
+                toast(activity, "已导出 → ${file.name}")
+            }
+            is TxtExporter.Result.Failure -> {
+                AlertDialog.Builder(activity)
+                    .setTitle("$title 失败")
+                    .setMessage(result.message)
+                    .setPositiveButton("查看缓存") { _, _ -> showStatus(activity) }
+                    .setNegativeButton("关闭", null)
+                    .show()
+            }
+        }
     }
 
     private fun mergePlaintext(activity: Activity) {
@@ -368,11 +406,16 @@ object FloatingExportMenu {
             val ids = ChapterCacheHooker.idsFor(bookId)
             "downloadedIds: ${ids.size}\n  sample: ${ids.take(12).joinToString()}"
         }
+        val dirs = runCatching {
+            TxtExporter.describeWritableDirs(activity.applicationContext)
+        }.getOrDefault("(dir probe failed)")
         AlertDialog.Builder(activity)
             .setTitle("缓存状态")
             .setMessage(
-                ChapterMemoryStore.statusText() + "\n\n--- downloaded ---\n" + dl +
-                    "\nbatchRunning=${BatchDownloadedLoader.isRunning()}"
+                ChapterMemoryStore.statusText() +
+                    "\n\n--- downloaded ---\n" + dl +
+                    "\nbatchRunning=${BatchDownloadedLoader.isRunning()}" +
+                    "\n\n--- export dirs ---\n" + dirs
             )
             .setPositiveButton("确定", null)
             .show()

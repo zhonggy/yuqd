@@ -1,6 +1,5 @@
 package com.github.qdreaderexporter.hook
 
-import com.github.qdreaderexporter.BuildConfig
 import com.github.qdreaderexporter.cache.BookSession
 import com.github.qdreaderexporter.cache.CaptureSource
 import com.github.qdreaderexporter.cache.ChapterMemoryStore
@@ -212,10 +211,10 @@ object ChapterContentHooker : YukiBaseHooker() {
         val bookId = readLongLike(entity, *HookTargets.BOOK_ID_KEYS)
             ?: readStringProperty(entity, *HookTargets.BOOK_ID_KEYS)
             ?: ChapterMemoryStore.current?.bookId
-            ?: return false
+            ?: "unknown"
         val chapterId = readLongLike(entity, *HookTargets.CHAPTER_ID_KEYS)
             ?: readStringProperty(entity, *HookTargets.CHAPTER_ID_KEYS)
-            ?: return false
+            ?: ("auto-" + Integer.toHexString(content.hashCode()))
         val chapterName = readStringProperty(entity, *HookTargets.CHAPTER_NAME_KEYS).orEmpty()
         val bookName = readStringProperty(entity, *HookTargets.BOOK_NAME_KEYS)
 
@@ -228,18 +227,22 @@ object ChapterContentHooker : YukiBaseHooker() {
         )
         ChapterMemoryStore.put(record)
         if (!bookName.isNullOrBlank()) {
-            ChapterMemoryStore.updateSession { it?.withBookName(bookName) }
+            ChapterMemoryStore.updateSession { prev ->
+                val base = prev ?: BookSession(bookId = bookId)
+                base.copy(bookId = bookId).withBookName(bookName)
+            }
+        } else if (ChapterMemoryStore.current?.bookId.isNullOrBlank() && bookId != "unknown") {
+            ChapterMemoryStore.updateSession {
+                (it ?: BookSession(bookId = bookId)).copy(bookId = bookId)
+            }
         }
 
-        if (BuildConfig.DEBUG) {
-            val preview = content.take(80).replace("\n", " ")
-            YLog.debug(
-                "captured chapter book=$bookId ch=$chapterId name=$chapterName " +
-                    "len=${content.length} src=$source preview=$preview"
-            )
-        } else {
-            YLog.info("captured chapter book=$bookId ch=$chapterId len=${content.length}")
-        }
+        // Always log capture (info) so device logs prove hooks work
+        val preview = content.take(60).replace("\n", " ")
+        YLog.info(
+            "captured chapter book=$bookId ch=$chapterId name=$chapterName " +
+                "len=${content.length} src=$source preview=$preview"
+        )
         return true
     }
 }

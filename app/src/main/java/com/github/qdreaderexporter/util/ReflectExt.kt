@@ -113,14 +113,34 @@ object ReflectExt {
             return s.takeIf { it.isNotBlank() && looksLikeProse(it) }
         }
         val contentKeys = arrayOf(
-            "content", "chapterContent", "contentStr", "plainText",
-            "text", "body", "chapterText", "mContent", "contentText"
+            "content", "chapterContent", "contentStr", "contentString", "finalContentStr",
+            "plainText", "text", "body", "chapterText", "mContent", "contentText",
+            "contentTxt", "bodyRichText", "mTragetContent", "firstChapterContent",
+            "ttsChapterContent", "streamContent", "selectedChapterContent",
+            "readContentString", "customContent"
         )
         // Prefer explicit content fields
         for (key in contentKeys) {
             readStringProperty(target, key)?.let { raw ->
                 val plain = stripSimpleHtml(raw)
                 if (looksLikeProse(plain)) return plain
+            }
+        }
+        // Nested one level: content/chapterContent object fields
+        for (f in target.javaClass.allFields()) {
+            val v = f.safeGet(target) ?: continue
+            if (v === target) continue
+            if (v is Number || v is Boolean) continue
+            val name = f.name.lowercase()
+            if (name.contains("content") || name.contains("chapter") || name.contains("text") ||
+                name.contains("body")
+            ) {
+                if (v is String || v is CharSequence) {
+                    val plain = stripSimpleHtml(v.toString())
+                    if (looksLikeProse(plain)) return plain
+                } else {
+                    extractPlainContentShallow(v)?.let { return it }
+                }
             }
         }
         // Scan all string fields for longest prose-like text
@@ -139,6 +159,25 @@ object ReflectExt {
         return best
     }
 
+    private fun extractPlainContentShallow(target: Any?): String? {
+        if (target == null) return null
+        if (target is String || target is CharSequence) {
+            val plain = stripSimpleHtml(target.toString())
+            return plain.takeIf { looksLikeProse(it) }
+        }
+        val keys = arrayOf(
+            "content", "chapterContent", "contentStr", "contentString", "plainText",
+            "text", "body", "mContent", "finalContentStr"
+        )
+        for (key in keys) {
+            readStringProperty(target, key)?.let { raw ->
+                val plain = stripSimpleHtml(raw)
+                if (looksLikeProse(plain)) return plain
+            }
+        }
+        return null
+    }
+
     fun stripSimpleHtml(input: String): String {
         return input
             .replace(Regex("(?i)<br\\s*/?>"), "\n")
@@ -154,15 +193,15 @@ object ReflectExt {
     }
 
     fun looksLikeProse(text: String): Boolean {
-        if (text.length < 20) return false
+        if (text.length < 12) return false
+        val hasCjk = text.any { it in '一'..'鿿' }
+        if (hasCjk && text.count { it in '一'..'鿿' } >= 8) return true
         // Reject obvious ciphertext / base64-ish blobs
         val alnum = text.count { it.isLetterOrDigit() }
         val ratio = alnum.toDouble() / text.length
-        if (ratio > 0.95 && text.length > 200 && !text.any { it in '一'..'鿿' }) {
+        if (ratio > 0.95 && text.length > 200 && !hasCjk) {
             return false
         }
-        // Prefer Chinese novel text or reasonably long paragraphs
-        val hasCjk = text.any { it in '一'..'鿿' }
-        return hasCjk || text.length > 80
+        return text.length > 60
     }
 }

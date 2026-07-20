@@ -82,12 +82,16 @@ object RuntimeDiagnostics {
                 appendLine("${f.absolutePath} exists=${f.exists()} canRead=${f.canRead()}")
             }
             appendLine()
+            appendLine("--- export dirs ---")
+            append(TxtExporter.describeWritableDirs(context))
+            appendLine()
             appendLine("--- notes ---")
             appendLine("1) Captures plaintext AFTER host decrypt/load only.")
             appendLine("2) Batch load re-invokes host local load APIs for downloaded IDs — no AES reimplementation.")
             appendLine("3) Encrypted offline chapter files are NOT decrypted.")
             appendLine("4) Export path: ${TxtExporter.exportDir(context).absolutePath}")
-            appendLine("5) If hooks miss, update HookTargets via jadx (tools/notes-7.9.394.md).")
+            appendLine("5) Prefer /sdcard/QDReaderExporter when writable; else host app-private path.")
+            appendLine("6) If hooks miss, update HookTargets via jadx (tools/notes-7.9.394.md).")
         }
     }
 
