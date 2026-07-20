@@ -79,4 +79,4 @@ Search queries in jadx:
 ## Passive vs active cache
 
 - **v1 shipped:** passive — only chapters loaded in this process appear in export.  
-- **v1.1 optional:** call host cache APIs after jadx proves disk-only path; never trigger `onBuy`.
+- **v0.3.0 batch (no AES):** observe downloaded IDs → re-invoke host local load APIs → capture post-decrypt plaintext. Never reimplement VIP/AES; `onBuy` is skip signal only.

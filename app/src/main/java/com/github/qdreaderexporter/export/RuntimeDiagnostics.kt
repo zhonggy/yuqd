@@ -7,6 +7,7 @@ import com.github.qdreaderexporter.BuildConfig
 import com.github.qdreaderexporter.cache.ChapterMemoryStore
 import com.github.qdreaderexporter.hook.ChapterCacheHooker
 import com.github.qdreaderexporter.hook.HookTargets
+import com.github.qdreaderexporter.util.HostInstanceRegistry
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -57,13 +58,17 @@ object RuntimeDiagnostics {
             appendLine()
             appendLine("--- downloaded ids observed ---")
             if (ChapterCacheHooker.downloadedIds.isEmpty()) {
-                appendLine("(none yet — open book / trigger host cache APIs)")
+                appendLine("(none yet — open book / chapter list / download manager)")
             } else {
                 ChapterCacheHooker.downloadedIds.forEach { (bookId, ids) ->
                     appendLine("bookId=$bookId count=${ids.size}")
                     appendLine("  sample: ${ids.take(12).joinToString()}")
                 }
             }
+            appendLine()
+            appendLine("--- host engine instances ---")
+            append(HostInstanceRegistry.statusText())
+            appendLine("batchRunning: ${BatchDownloadedLoader.isRunning()}")
             appendLine()
             appendLine("--- storage roots ---")
             listOfNotNull(
@@ -78,10 +83,11 @@ object RuntimeDiagnostics {
             }
             appendLine()
             appendLine("--- notes ---")
-            appendLine("1) v1.1 captures plaintext AFTER host decrypt/load only.")
-            appendLine("2) Encrypted offline chapter files are NOT decrypted.")
-            appendLine("3) Export path: ${TxtExporter.exportDir(context).absolutePath}")
-            appendLine("4) If hooks miss, update HookTargets via jadx (tools/notes-7.9.394.md).")
+            appendLine("1) Captures plaintext AFTER host decrypt/load only.")
+            appendLine("2) Batch load re-invokes host local load APIs for downloaded IDs — no AES reimplementation.")
+            appendLine("3) Encrypted offline chapter files are NOT decrypted.")
+            appendLine("4) Export path: ${TxtExporter.exportDir(context).absolutePath}")
+            appendLine("5) If hooks miss, update HookTargets via jadx (tools/notes-7.9.394.md).")
         }
     }
 

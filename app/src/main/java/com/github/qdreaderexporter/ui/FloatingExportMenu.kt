@@ -16,9 +16,11 @@ import android.widget.FrameLayout
 import android.widget.TextView
 import android.widget.Toast
 import com.github.qdreaderexporter.cache.ChapterMemoryStore
+import com.github.qdreaderexporter.export.BatchDownloadedLoader
 import com.github.qdreaderexporter.export.RuntimeDiagnostics
 import com.github.qdreaderexporter.export.StorageScanner
 import com.github.qdreaderexporter.export.TxtExporter
+import com.github.qdreaderexporter.hook.ChapterCacheHooker
 import java.lang.ref.WeakReference
 import java.util.concurrent.Executors
 import kotlin.math.abs
@@ -98,9 +100,17 @@ object FloatingExportMenu {
         val currentCount = ChapterMemoryStore.count()
         val allCount = ChapterMemoryStore.totalChapterCount()
         val bookCount = ChapterMemoryStore.bookIds().size
+        val bookId = ChapterMemoryStore.current?.bookId
+        val dlCount = bookId?.let { ChapterCacheHooker.idsFor(it).size } ?: 0
+        val batchLabel = if (BatchDownloadedLoader.isRunning()) {
+            "批量加载已下载章节（进行中…点此无效）"
+        } else {
+            "批量加载当前书已下载章节  ·  已知ID $dlCount"
+        }
         val items = arrayOf(
             "导出当前阅读书籍 (TXT)  ·  $currentCount 章",
             "导出全部已捕获书籍 (TXT)  ·  ${bookCount}书 / ${allCount}章",
+            batchLabel,
             "尝试合并明文缓存（诊断）",
             "仅扫描存储路径",
             "运行时诊断",
@@ -113,13 +123,88 @@ object FloatingExportMenu {
                 when (which) {
                     0 -> exportCurrentBook(activity)
                     1 -> exportAllBooks(activity)
-                    2 -> mergePlaintext(activity)
-                    3 -> scanStorage(activity)
-                    4 -> runDiagnostic(activity)
-                    5 -> showStatus(activity)
-                    6 -> {
+                    2 -> batchLoadDownloaded(activity)
+                    3 -> mergePlaintext(activity)
+                    4 -> scanStorage(activity)
+                    5 -> runDiagnostic(activity)
+                    6 -> showStatus(activity)
+                    7 -> {
                         ChapterMemoryStore.clear()
                         toast(activity, "已清空全部内存缓存")
+                    }
+                }
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun batchLoadDownloaded(activity: Activity) {
+        if (BatchDownloadedLoader.isRunning()) {
+            toast(activity, "批量加载进行中…")
+            return
+        }
+        val bookId = ChapterMemoryStore.current?.bookId
+        if (bookId.isNullOrBlank()) {
+            toast(activity, "尚未识别当前书籍，请先打开阅读页")
+            return
+        }
+        val known = ChapterCacheHooker.idsFor(bookId).size
+        AlertDialog.Builder(activity)
+            .setTitle("批量加载已下载章节")
+            .setMessage(
+                "将让宿主按「已下载章节 ID」自行加载本地/已购缓存，" +
+                    "模块只捕获解密后的明文。\n\n" +
+                    "当前书: ${ChapterMemoryStore.current?.bookName?.ifBlank { bookId } ?: bookId}\n" +
+                    "已知下载 ID: $known\n" +
+                    "已捕获: ${ChapterMemoryStore.count(bookId)} 章\n\n" +
+                    "不会做 AES/VIP 解密，不会购买未购章节。\n" +
+                    "若 ID 为 0：请先打开目录或下载管理再试。"
+            )
+            .setPositiveButton("开始") { _, _ ->
+                toast(activity, "开始批量加载…请保持阅读页在前台")
+                io.execute {
+                    val result = BatchDownloadedLoader.runForCurrentBook(
+                        maxChapters = 300,
+                        perChapterWaitMs = 500L
+                    ) { p ->
+                        if (p.attempted % 10 == 0 || p.attempted == 1) {
+                            mainHandler.post {
+                                toast(
+                                    activity,
+                                    "批量 ${p.attempted}/${p.totalIds - p.skippedAlready}  " +
+                                        "已捕获 ${p.capturedNow} 章"
+                                )
+                            }
+                        }
+                    }
+                    val reportFile = runCatching {
+                        val dir = TxtExporter.exportDir(activity.applicationContext)
+                        val f = java.io.File(
+                            dir,
+                            "batch_${System.currentTimeMillis()}.log"
+                        )
+                        f.writeText(result.toText())
+                        f
+                    }.getOrNull()
+                    mainHandler.post {
+                        AlertDialog.Builder(activity)
+                            .setTitle("批量加载完成")
+                            .setMessage(
+                                "下载 ID: ${result.totalIds}\n" +
+                                    "尝试加载: ${result.attempted}\n" +
+                                    "新捕获: ${result.newlyCaptured}\n" +
+                                    "当前共捕获: ${result.totalCaptured}\n" +
+                                    "跳过已有: ${result.skippedAlready}\n" +
+                                    "宿主 onBuy 信号: ${result.buySignals}\n" +
+                                    "API 命中: ${result.invokeHits}\n" +
+                                    "日志: ${reportFile?.absolutePath ?: "(write failed)"}\n\n" +
+                                    "可继续点「导出当前阅读书籍」。"
+                            )
+                            .setPositiveButton("导出当前书") { _, _ ->
+                                exportCurrentBook(activity)
+                            }
+                            .setNegativeButton("关闭", null)
+                            .show()
                     }
                 }
             }
@@ -276,9 +361,19 @@ object FloatingExportMenu {
     }
 
     private fun showStatus(activity: Activity) {
+        val bookId = ChapterMemoryStore.current?.bookId
+        val dl = if (bookId.isNullOrBlank()) {
+            "(no book)"
+        } else {
+            val ids = ChapterCacheHooker.idsFor(bookId)
+            "downloadedIds: ${ids.size}\n  sample: ${ids.take(12).joinToString()}"
+        }
         AlertDialog.Builder(activity)
             .setTitle("缓存状态")
-            .setMessage(ChapterMemoryStore.statusText())
+            .setMessage(
+                ChapterMemoryStore.statusText() + "\n\n--- downloaded ---\n" + dl +
+                    "\nbatchRunning=${BatchDownloadedLoader.isRunning()}"
+            )
             .setPositiveButton("确定", null)
             .show()
     }

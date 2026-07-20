@@ -77,7 +77,8 @@ object HookTargets {
         CLS_READ_BOOK,
         "com.qidian.QDReader.readerengine.manager.a",
         "com.qidian.QDReader.readerengine.manager.b",
-        "com.qidian.QDReader.readerengine.controller.a"
+        "com.qidian.QDReader.readerengine.controller.a",
+        "com.qidian.QDReader.readerengine.view.pageflip.scrollpage.QDNewScrollFlipView"
     )
 
     val CONTENT_METHOD_CANDIDATES = arrayOf(
@@ -85,6 +86,11 @@ object HookTargets {
         M_LOAD_CHAPTER_CONTENT_FINISH,
         M_GET_CHAPTER_CONTENT,
         M_GET_CHAPTER_CONTENT_ONLY,
-        M_LOAD_CHAPTER_CONTENT
+        M_LOAD_CHAPTER_CONTENT,
+        "loadChapterContentWithId",
+        "loadChapterData",
+        "switchChapter",
+        "preloadChapter",
+        "reloadChapterContent"
     )
 }

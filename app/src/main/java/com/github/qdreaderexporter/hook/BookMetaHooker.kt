@@ -5,6 +5,7 @@ import android.os.Bundle
 import com.github.qdreaderexporter.cache.BookSession
 import com.github.qdreaderexporter.cache.ChapterMemoryStore
 import com.github.qdreaderexporter.util.HostContext
+import com.github.qdreaderexporter.util.HostInstanceRegistry
 import com.github.qdreaderexporter.util.ReflectExt.readLongLike
 import com.github.qdreaderexporter.util.ReflectExt.readStringProperty
 import com.highcapable.kavaref.KavaRef.Companion.resolve
@@ -68,7 +69,10 @@ object BookMetaHooker : YukiBaseHooker() {
                 runCatching {
                     ctor.hook {
                         after {
-                            runCatching { extractFromInstance(instance) }
+                            runCatching {
+                                HostInstanceRegistry.rememberReadBook(instance)
+                                extractFromInstance(instance)
+                            }
                         }
                     }
                 }

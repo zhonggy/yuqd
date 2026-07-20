@@ -5,6 +5,8 @@ import com.github.qdreaderexporter.cache.BookSession
 import com.github.qdreaderexporter.cache.CaptureSource
 import com.github.qdreaderexporter.cache.ChapterMemoryStore
 import com.github.qdreaderexporter.cache.ChapterRecord
+import com.github.qdreaderexporter.export.BatchDownloadedLoader
+import com.github.qdreaderexporter.util.HostInstanceRegistry
 import com.github.qdreaderexporter.util.ReflectExt.asStringValue
 import com.github.qdreaderexporter.util.ReflectExt.extractPlainContent
 import com.github.qdreaderexporter.util.ReflectExt.readLongLike
@@ -26,11 +28,38 @@ object ChapterContentHooker : YukiBaseHooker() {
         var hooked = 0
         for (owner in HookTargets.CONTENT_OWNER_CANDIDATES) {
             val clazz = owner.toClassOrNull(appClassLoader) ?: continue
+            // Remember live engine instances for batch host-load
+            runCatching {
+                clazz.declaredConstructors.forEach { ctor ->
+                    runCatching {
+                        ctor.hook {
+                            after {
+                                when {
+                                    owner.contains("ChapterProvider") ->
+                                        HostInstanceRegistry.rememberChapterProvider(instance)
+                                    owner.contains("ReadBook") ->
+                                        HostInstanceRegistry.rememberReadBook(instance)
+                                    else -> HostInstanceRegistry.rememberExtra(instance)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             for (methodName in HookTargets.CONTENT_METHOD_CANDIDATES) {
                 runCatching {
                     clazz.resolve().method {
                         name = methodName
                     }.hookAll {
+                        before {
+                            HostInstanceRegistry.rememberExtra(instance)
+                            when {
+                                owner.contains("ChapterProvider") ->
+                                    HostInstanceRegistry.rememberChapterProvider(instance)
+                                owner.contains("ReadBook") ->
+                                    HostInstanceRegistry.rememberReadBook(instance)
+                            }
+                        }
                         after {
                             runCatching { captureFromHook(methodName, this) }
                                 .onFailure { YLog.debug("capture error in $methodName: ${it.message}") }
@@ -44,8 +73,9 @@ object ChapterContentHooker : YukiBaseHooker() {
             }
         }
 
-        // Also try constructor of content entity — content often assigned at construct time
         hookContentEntityConstructors()
+        hookBuySignals()
+        hookFlipViewLoad()
 
         if (hooked == 0) {
             YLog.error(
@@ -54,6 +84,52 @@ object ChapterContentHooker : YukiBaseHooker() {
             )
         } else {
             YLog.info("ChapterContentHooker: $hooked method-group(s) registered")
+        }
+    }
+
+    /** Observe onBuy callbacks so batch loader can count skip signals (no purchase). */
+    private fun hookBuySignals() {
+        val callback =
+            "com.qidian.QDReader.readerengine.view.pageflip.scrollpage." +
+                "QDNewScrollFlipView\$loadChapterData\$getChapterContentCallback\$1"
+        val clazz = callback.toClassOrNull(appClassLoader) ?: return
+        runCatching {
+            clazz.resolve().method { name = "onBuy" }.hookAll {
+                after {
+                    BatchDownloadedLoader.noteBuySignal("getChapterContentCallback.onBuy")
+                }
+            }
+            YLog.info("ChapterContentHooker: hooked onBuy on flip callback")
+        }.onFailure {
+            YLog.debug("ChapterContentHooker: onBuy hook skip — ${it.message}")
+        }
+    }
+
+    private fun hookFlipViewLoad() {
+        val flip =
+            "com.qidian.QDReader.readerengine.view.pageflip.scrollpage.QDNewScrollFlipView"
+        val clazz = flip.toClassOrNull(appClassLoader) ?: return
+        runCatching {
+            clazz.declaredConstructors.forEach { ctor ->
+                runCatching {
+                    ctor.hook {
+                        after { HostInstanceRegistry.rememberFlipView(instance) }
+                    }
+                }
+            }
+            for (methodName in arrayOf("loadChapterData", "loadChapterContentWithId", "switchChapter")) {
+                runCatching {
+                    clazz.resolve().method { name = methodName }.hookAll {
+                        before { HostInstanceRegistry.rememberFlipView(instance) }
+                        after {
+                            runCatching { captureFromHook(methodName, this) }
+                        }
+                    }
+                    YLog.info("ChapterContentHooker: hooked flip $methodName")
+                }
+            }
+        }.onFailure {
+            YLog.debug("ChapterContentHooker: flip view hook skip — ${it.message}")
         }
     }
 
