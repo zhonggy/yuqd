@@ -61,9 +61,11 @@ class MainActivity : AppCompatActivity() {
                 "2. 作用域仅勾选 com.qidian.QDReader\n" +
                 "3. 强行停止起点读书后重新打开\n" +
                 "4. 进入小说阅读页，右下角出现「导出」按钮\n" +
-                "5. 可先「批量加载当前书已下载章节」，再导出\n" +
-                "6. 导出优先 /sdcard/QDReaderExporter/（对话框显示实际路径）\n" +
-                "7. 不做 AES/VIP 解密；仅捕获宿主已解密明文"
+                "5. 点按钮会弹出内容层菜单（非系统 AlertDialog）\n" +
+                "6. 可先「批量加载当前书已下载章节」，再导出\n" +
+                "7. 导出优先 /sdcard/QDReaderExporter/\n" +
+                "   同时会写 MODULE_ALIVE.txt / STATUS.txt / LAST_EXPORT.txt\n" +
+                "8. 不做 AES/VIP 解密；仅捕获宿主已解密明文"
         )
         addLine("")
         addLine("声明", 16f, Color.BLACK, true)
